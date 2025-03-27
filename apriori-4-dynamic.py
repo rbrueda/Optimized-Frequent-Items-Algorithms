@@ -39,62 +39,45 @@ def getVerticalDataRepresentation(df):
 #implement heap-based pruning -> min heap to prioritize high impact itemsets based on their support -> dynamically remocies low-priority itemsets
 #prioritizing items by Lift, Transaction impact
 #start initializing empty 
-import heapq
-import numpy as np
+def pruneLowImpactItems(vertical_df, minSupport, total_transactions, transactions_lengths, prev_heap=None):
+    #add priority (higher rate to get pruned) to lower lift (weaher association) and lower transaction impact (higher impact means we keep it)
+    w1 = 0.5
+    w2 = 0.5
 
-def pruneLowImpactItems(vertical_df, minSupport, total_transactions, w1=0.5, w2=0.5, pruning_threshold=None, prev_heap=None):
-    """
-    Prune low-impact items based on lift and transaction impact dynamically with variable pruning.
-    The number of pruned items adjusts depending on how different the priority values are.
+    #todo: figure out if we eent need freqSet
 
-    :param vertical_df: Vertical data representation (dict of items -> set of transactions)
-    :param minSupport: Minimum support threshold
-    :param total_transactions: Total number of transactions in the dataset
-    :param w1: Weight for lift prioritization
-    :param w2: Weight for transaction impact prioritization
-    :param pruning_threshold: Pruning cutoff threshold based on priority values (None to calculate dynamically)
-    :return: Pruned vertical data representation
-    """
-    # Create a min-heap for prioritizing low-lift and low-impact itemsets
-    min_heap = []
-    priority_values = []
+    #first iteration -> need to create a new heap
+    if prev_heap is None:
+        min_heap = [] #min heap for storing (support, item) pairs
 
-    for item, transactions in vertical_df.items():
-        support = len(transactions)
-        if support >= minSupport:  # Only consider items with support greater than minSupport
-            lift = (support / total_transactions) / (sum(len(v) for v in vertical_df.values()) / total_transactions) ** 2
-            impact = support / total_transactions if total_transactions > 0 else 0
-            # Priority for pruning: low lift and low impact are prioritized
-            priority = (w1 * lift) + (w2 * (1 - impact))
-            priority_values.append(priority)
-            heapq.heappush(min_heap, (priority, item))
+        #iterate through each entry in vertical_df (item -> movie, transaction -> user_ids)
+        for item, transactions in vertical_df.items():
+            #find support
+            support = len(transactions)
+            if support >= minSupport:
+                lift = (support / total_transactions) / ((sum(len(v) for v in vertical_df.values()) / total_transactions) ** 2 )
+                #since support is len(transactions)
+                impact = support / total_transactions if total_transactions > 0 else 0
 
-    # If no pruning threshold is provided, calculate it dynamically based on priority value differences
-    if pruning_threshold is None:
-        # Calculate the difference between consecutive priority values
-        priority_diffs = np.diff(sorted(priority_values))
-        
-        # Determine a threshold based on the average jump size
-        avg_jump = np.mean(priority_diffs) if len(priority_diffs) > 0 else 0
-        pruning_threshold = np.percentile(priority_diffs, 75)  # Dynamic pruning threshold based on high jumps
+                #prioritizing lower lift and lower impact 
+                priority = (w1 * lift) + (w2 * (1- impact))
+                heapq.heappush(min_heap, (priority, item)) #push items into heap (low-priority -> prune first)
+    else:
+        min_heap = prev_heap
 
-    print(f"Using dynamic pruning threshold: {pruning_threshold}")
-
-    # Prune low-priority items with early termination based on priority and pruning threshold
+    #remove low-impact items
+    #todo: stop at a certain threshold and report documentation for this implementation
     pruned_df = {}
+    
     while min_heap:
-        # Get the item with the lowest priority
+        #remove values from min_heap -> we remove values in min heap that ___
         priority, item = heapq.heappop(min_heap)
 
-        # Stop pruning if the priority value is above the pruning threshold
-        if priority >= pruning_threshold:
+        #only add values to vertical df where the support >= minSupport
+        if len(vertical_df[item]) >= minSupport:
             pruned_df[item] = vertical_df[item]
-        else:
-            # Stop if we hit an item with priority below threshold
-            break
-
+        
     return pruned_df
-
 
 def subsets(arr):
     return chain(*[combinations(arr, i+1) for i, a in enumerate(arr)])
@@ -108,76 +91,111 @@ def joinSet(itemSet, length):
 #integrating VDR and heap pruning into apriori algorithm
 #update: use lift instead of confidence
 def apriori(df, minSupport, minConfidence, liftThreshold):
-    # Convert to vertical data representation
+    #convert to vertical data representation
     vertical_df = getVerticalDataRepresentation(df)
 
-    # Apply stricter pruning using vertical data representation and heap-based pruning
-    vertical_df = pruneLowImpactItems(vertical_df, minSupport, len(df), len(df), prev_heap=None)
+    freqSet = defaultdict(int) #dictionary to store frequency of itemsets
+    largeSet = dict() #stores frequent itemsets at each iteration
+    assocRules = dict() #stores the association rules
 
-    freqSet = defaultdict(int)  # Dictionary to store frequency of itemsets
-    largeSet = dict()  # Stores frequent itemsets at each iteration
-
-    # Find frequent 1-itemset from the vertical data representation
+    #find frequent 1-itemset from the vertical data representation
     oneCSet = set()
     for movie, transactions in vertical_df.items():
-        oneCSet.add(frozenset([movie]))  # Add frequent 1-itemset
-        freqSet[frozenset([movie])] = len(transactions)  # Update freqSet for single items
+        if len(transactions) >= minSupport:
+            oneCSet.add(frozenset([movie])) #add frequent 1-itemset
+            freqSet[frozenset([movie])] = len(transactions)  # update freqSet for single items
 
-    # Starting with 1-itemsets as the initial frequent itemsets
+    #starting with 1-itemsets as the initial frequent itemsets
     currentLSet = oneCSet
+    #total number of occurences before prunning
+    original_size = sum(len(v) for v in vertical_df.values()) 
+
+    #store previous frequent itemset size
     prevLSet = oneCSet
 
-    # Initial adjusted minSupport is just current one calculated
+    #initial adjusted minsupport is just current one calculated
     adjusted_minSupport = minSupport
 
-    # Starts with pairwise combinations
+    #starts with pairwise combinations
     k = 2
-
-    # Iterates until no more frequent itemsets can be found
+    #iterates umtil no more frequent itemsets can be found
     while currentLSet:
         print(f"currentLSet {k}:")
         print(currentLSet)
-        # Store frequent itemsets
+        #store frequent itemsets
         largeSet[k-1] = currentLSet
-
-        # Generate k-itemset candidates using set union for faster pair generation 
+        #generate k-itemset candidates using set union for faster pair generation 
         currentCSet = joinSet(currentLSet, k)
 
-        current_size = sum(len(v) for v in vertical_df.values())
-        print(f"Pruned vertical data representation size: {current_size}")
+        #Apply pruning using Vertical Data Representation and heap-based pruning
+        vertical_df_pruned = pruneLowImpactItems(vertical_df, adjusted_minSupport, len(df), len(df), prev_heap=None)
+        current_size = sum(len(v) for v in vertical_df_pruned.values())
+        
+        # pruning_ratio = current_size / original_size if original_size > 0 else 1
+        
+        # # Simple minSupport adjustment based on pruning ratio
+        # minSupport_floor = 1  # Minimum valid support (to avoid going too low)
+        # max_threshold = len(df)  # Cap at the number of users or dataset size
 
-        # Generate k-itemsets and count supports
+        # # Define how sensitive the adjustment should be based on pruning ratio
+        # pruning_factor = 1.5  # You can tweak this value to adjust sensitivity
+
+        # #cache previous minSupport value
+        # previous_minSupport = adjusted_minSupport
+
+        # # Adjust minSupport based on pruning ratio
+        # if pruning_ratio > 0.5:  # If more than 50% of items are pruned, increase minSupport
+        #     adjusted_minSupport = previous_minSupport * pruning_factor
+        # else:  # If pruning is not significant, decrease minSupport slightly
+        #     adjusted_minSupport = previous_minSupport / pruning_factor
+
+        # # Ensure the adjusted minSupport stays within the practical range
+        # adjusted_minSupport = max(minSupport_floor, adjusted_minSupport)  # Don't go below minSupport_floor
+        # adjusted_minSupport = min(adjusted_minSupport, max_threshold)  # Don't exceed max threshold (number of users)
+
+        # # Round the result to an integer
+        # adjusted_minSupport = round(adjusted_minSupport)
+
+        # # Output the adjusted minSupport
+        # print("Adjusted minSupport:", adjusted_minSupport)
+
+        #cache previously frequent itemset
+        prevLSet = currentLSet
+
+        #generate k-itemsets and count supports
         currentLSet = set()
 
         for itemset in currentCSet:
-            # Calculate support for the vertical dataframe
-            transaction_sets = [vertical_df[item] for item in itemset]
+            #calculate support for the vertical dataframe
+            transaction_sets = [vertical_df_pruned[item] for item in itemset]
             common_transaction = set.intersection(*transaction_sets)
             support = len(common_transaction)
 
             # Update freqSet with the calculated support
             freqSet[itemset] = support
 
-            # If the support of the itemset is >= minSupport, add to the currentLSet
+            #if the support of the itemset is >= minSupport, add to the currentLSet
             if support >= adjusted_minSupport: 
                 currentLSet.add(itemset)
-        
-        # Adjust lift threshold dynamically determined by pruning rate between candidate and freq itemsets
+    
+        #adjust lift threshold dynamically determined by pruning rate between candidate and freq itemsets
         pruning_effect = len(currentLSet) / len(currentCSet) if len(currentCSet) > 0 else 1
-        liftThreshold *= liftThreshold * (1 + pruning_effect * 0.3)
+        liftThreshold *= liftThreshold * (1+pruning_effect*  0.3)
 
         k = k + 1
 
-    # Local function that returns the support of an item
+    #local function that returns the support of an item
     def getSupport(item):
         return freqSet[item]
-
-    # Store frequent itemsets into a list with their support values
+    
+    #store frequnet itemsets into a list with their support values
     toRetItems = []
     for key, value in largeSet.items():
         toRetItems.extend([(tuple(item), getSupport(item)) for item in value])
-
-    # List the association rules with confidence scores
+    
+    #lists the association rules with confidence scores
+    #for example {1,2} -> {3}
+    #for generating rule filtering
     toRetRules = []
     for key, value in list(largeSet.items())[1:]:
         for item in value:
@@ -189,15 +207,14 @@ def apriori(df, minSupport, minConfidence, liftThreshold):
                     support_element = getSupport(element)
                     if support_element > 0:  # Prevent division by zero for confidence calculation
                         confidence = getSupport(item) / getSupport(element)
-                        # Filter rules using minConfidence
+                        #filter rules using minconfidence
                         if confidence >= minConfidence:
                             toRetRules.append(((tuple(element), tuple(remain)), confidence))
                             lift = confidence / (getSupport(remain) / len(df))
                             if lift >= liftThreshold:
                                 toRetRules.append(((tuple(element), tuple(remain)), lift))
-
+    
     return toRetItems, toRetRules
-
 
 def skewness_correction(skewness, k=2.5, c=1.0):
     return 1 + (np.tanh(k * (abs(skewness) - c)) / 2)
@@ -248,6 +265,12 @@ items, rules = apriori(df, min_support_count, min_confidence, min_lift)
 end_time = time.time()
 
 elapsed_time = end_time - start_time
+
+# print("items:")
+# print(items)
+# print("...............")
+# print("rules:")
+# print(rules)
 
 with open("apriori-new-res.txt", "w") as f:
     f.write(f"Items:\n{items}\n---------------------------------------------------------------------\nRules:\n{rules}\n\n")

@@ -3,14 +3,14 @@
 
 #todo: implement with a trie for storing frequent itemsets
 #use vertical data representation (apriori-TID)
-#apply bloom filtere
-
+#apply bloom filters
 
 import pandas as pd
 import scipy
 from collections import defaultdict
 from itertools import  chain, combinations
 from optparse import OptionParser
+import time
 
 def subsets(arr):
     return chain(*[combinations(arr, i+1) for i, a in enumerate(arr)])
@@ -132,7 +132,9 @@ def apriori(df, minSupport, minConfidence):
     
     return toRetItems, toRetRules
 
-df = pd.read_csv('result3.csv')
+#todo: find better starting threshold
+
+df = pd.read_csv('result2.csv')
 
 # Step 1: Calculate Mean, Median, and Standard Deviation for the ratings (ignoring user_id)
 ratings = df.drop(columns='user_id')  # Drop 'user_id' column to focus on ratings
@@ -164,13 +166,26 @@ print(f"support threshold: {support_threshold}")
 print(f"lift threshold: {lift_threshold}")
 confidence_threshold = 0.6
 
-items, rules = apriori(df, 3, confidence_threshold)
+start_time = time.time()
+
+items, rules = apriori(df, 209, confidence_threshold)
+
+end_time = time.time()
+
+elapsed_time = end_time - start_time
+
+with open("apriori-orig-result.txt", "w") as f:
+    f.write(f"Items:\n{items}\n---------------------------------------------------------------------\nRules:\n{rules}\n\n")
+    f.write(f"final time: {elapsed_time:.4f} seconds")
 
 print("items:")
 print(items)
 print("...............")
 print("rules:")
 print(rules)
+
+
+print(f"final time: {elapsed_time:.4f} seconds")
 
 
 # apriori(df, support_threshold, lift_threshold)
