@@ -1,16 +1,12 @@
-#problem statement: trying to find which movies are likely to be rated together
-#used code from:https://github.com/asaini/Apriori/blob/python3/apriori.py 
-
-#changes: used lift that provides a better measure of how 2 items are truly independent from each other
-#   - ensures only stroong associations are kept
-
-
+#Used original Apriori code from:https://github.com/asaini/Apriori/blob/python3/apriori.py 
 
 import pandas as pd
 import scipy
 from collections import defaultdict
 from itertools import  chain, combinations
 from optparse import OptionParser
+import time
+import numpy as np
 
 def subsets(arr):
     return chain(*[combinations(arr, i+1) for i, a in enumerate(arr)])
@@ -22,18 +18,11 @@ def returnItemsWithMinSupport(movieSet, ratingsList, minSupport, freqSet):
 
     for movie in movieSet: 
         for ratings in ratingsList:
+            #if the movie value is 1
             if movie.issubset(ratings):
                 freqSet[movie] += 1
                 localSet[movie] += 1
 
-    #get the size of pruned items
-    pruned_size = sum(localSet.values())
-    original_size = len(ratingsList)
-    #compute the pruning ratio based on original list of reviews (aka transactions) and # of pruned values
-    pruning_ratio = pruned_size / original_size if original_size > 0 else 1
-
-    #dynamic minSupport  adjustment
-    adjusted_minSupport = minSupport * (1 - pruning_ratio * 0.5)
 
     for movie, count in localSet.items():
         support = float(count)
@@ -41,11 +30,8 @@ def returnItemsWithMinSupport(movieSet, ratingsList, minSupport, freqSet):
         if support >= minSupport:
             minimizedMovieSet.add(movie) #our new set
         
-    return minimizedMovieSet, pruning_ratio
+    return minimizedMovieSet
 
-#datapreprocessing -> drop first column
-#take our df -> create  2 lists -> 1 with list of rating combinations, df.iterrows() -> perform lambda on this. 2nd with list of movies (iterate through all columns instead of first one)
-#issue with this -> extra memory
 def getMovieSetRatingsList(df):
     #drop dirst column -> onky keep movie columns
     df =  df.drop('user_id', axis=1)
@@ -72,7 +58,7 @@ def joinSet(itemSet, length):
 
 
 #update: use lift instead of confidence
-def apriori(df, minSupport, minConfidence, liftThreshold):
+def apriori(df, minSupport, minConfidence):
     #extracts the set of unique items (movies) and the list of transactions (user ratings or transactions) from the dataset
     movieSet, ratingsList = getMovieSetRatingsList(df)
 
@@ -80,9 +66,10 @@ def apriori(df, minSupport, minConfidence, liftThreshold):
     largeSet = dict() #stores frequent itemsets at each iteration
     assocRules = dict() #stores the association rules
 
-
     #extracts frequent 1-itemsets -> updates freqSet with support counts
-    oneCSet, pruning_ratio = returnItemsWithMinSupport(movieSet, ratingsList, minSupport, freqSet)
+    oneCSet = returnItemsWithMinSupport(movieSet, ratingsList, minSupport, freqSet)
+
+    print(f"length of k = 1: {len(oneCSet)}")
 
     #starting with 1-itemsets as the initial frequent itemsets
     currentLSet = oneCSet
@@ -91,19 +78,16 @@ def apriori(df, minSupport, minConfidence, liftThreshold):
     k = 2
     #iterates umtil no more frequent itemsets can be found
     while currentLSet:
-        print(f"currentLSet {k}:")
-        print(currentLSet)
         #store frequent itemsets
         largeSet[k-1] = currentLSet
         #generate k-itemset candidates using set union for faster pair generation 
         currentCSet = joinSet(currentLSet, k)
 
         #prune itemsets using minSupport
-        currentLSet, pruning_ratio = returnItemsWithMinSupport(
+        currentLSet = returnItemsWithMinSupport(
             currentCSet, ratingsList, minSupport, freqSet)
         
-        #stronger pruning using lift association rule mining
-        liftThreshold = liftThreshold * (1+pruning_ratio *  0.3)
+        print(f"length of k = {k}: {len(currentLSet)}")
 
         k = k + 1
 
@@ -118,7 +102,6 @@ def apriori(df, minSupport, minConfidence, liftThreshold):
     
     #lists the association rules with confidence scores
     #for example {1,2} -> {3}
-    #for generating rule filtering
     toRetRules = []
     for key, value in list(largeSet.items())[1:]:
         for item in value:
@@ -130,48 +113,61 @@ def apriori(df, minSupport, minConfidence, liftThreshold):
                     #filter rules using minconfidence
                     if confidence >= minConfidence:
                         toRetRules.append(((tuple(element), tuple(remain)), confidence))
-                        lift = confidence / (getSupport(remain) / len(ratingsList))
-                        if lift >= liftThreshold:
-                            toRetRules.append(((tuple(element), tuple(remain)), lift))
     
     return toRetItems, toRetRules
 
-df = pd.read_csv('result3.csv')
+def skewness_correction(skewness, k=2.5, c=1.0):
+    return 1 + (np.tanh(k * (abs(skewness) - c)) / 2)
 
-# Step 1: Calculate Mean, Median, and Standard Deviation for the ratings (ignoring user_id)
-ratings = df.drop(columns='user_id')  # Drop 'user_id' column to focus on ratings
+df = pd.read_csv('result2.csv')
 
-# Flatten the DataFrame to get all the ratings as a single list
+# Drop user_id column
+ratings = df.drop(columns='user_id')
+
+# Flatten all ratings
 ratings_values = ratings.values.flatten()
 
-# Calculate the mean, median, and standard deviation for all ratings
+# Calculate mean, median, standard deviation
 mean_item = ratings_values.mean()
 median_item = pd.Series(ratings_values).median()
 std_item = pd.Series(ratings_values).std()
 
+# Compute skewness
 skewness = (3 * (mean_item - median_item)) / std_item
 
-#calculate minsupport using skewness
+# Compute skewness correction
+S_skew = skewness_correction(skewness)
+
+# Compute α dynamically based on dataset size
+num_users = len(df)
+num_movies = len(ratings.columns)
+
+alpha = 0.1 * np.log10(num_users)  # Scale α based on dataset size
+
+min_support_count = alpha * num_users * S_skew 
+min_support_count = int(min_support_count)
+#make sure it doesnt exceed the side of the number of users
+min_support_count = min(num_users, min_support_count)
+
+# Assign confidence and lift thresholds based on skewness
 if skewness > 1.5:
-    min_support = 0.1
-    #set lift threshold based on skewness
-    lift_threshold = 2.0 #stronger positive correlation - items occur together twice as often as expected
-elif skewness <= 1.5 and skewness >= 0.5: 
-    min_support = 0.05
-    lift_threshold = 1.3 #mild positive association between items 
+    min_confidence = 0.75  # Stricter confidence for highly skewed data
+    min_lift = 1.5         # Require stronger associations
+elif 0.5 <= skewness <= 1.5:
+    min_confidence = 0.65  # Moderate confidence
+    min_lift = 1.2         # Normal lift threshold
 else:
-    min_support = 0.02
-    lift_threshold = 1.0 #two items are idenpendent of one another - occurence of one item does not affect the probability of the other item
+    min_confidence = 0.6   # Less strict for low-skew data
+    min_lift = 1.0         # Default neutral lift
 
-support_threshold = int(min_support * len(df))
-print(f"support threshold: {support_threshold}")
-print(f"lift threshold: {lift_threshold}")
-confidence_threshold = 0.6
+start_time = time.time()
+items, rules = apriori(df, min_support_count, min_confidence)
+end_time = time.time()
 
-items, rules = apriori(df, 3, confidence_threshold, lift_threshold)
+elapsed_time = end_time - start_time
 
-print("items:")
-print(items)
-print("...............")
-print("rules:")
-print(rules)
+with open("apriori-orig-result.txt", "w") as f:
+    f.write(f"Items:\n{items}\n---------------------------------------------------------------------\nRules:\n{rules}\n\n")
+    f.write(f"final time: {elapsed_time:.4f} seconds")
+
+print(f"final time: {elapsed_time:.4f} seconds")
