@@ -41,6 +41,7 @@ def pruneLowImpactItems(vertical_df, minSupport, total_transactions, w1=0.5, w2=
             importance_score = support / median_support  #relative to median support
             impact = support / total_transactions if total_transactions > 0 else 0
             priority = (w1 * importance_score) + (w2 * impact)
+            print(priority)
             priority_values.append(priority)
             heapq.heappush(min_heap, (priority, movieID, transactions))
     
@@ -169,7 +170,7 @@ def skewness_correction(skewness, k=2.5, c=1.0):
     return 1 + (np.tanh(k * (abs(skewness) - c)) / 2)
 
 #reads the binary data of movie rating transactions
-df = pd.read_csv('result2.csv')
+df = pd.read_csv('../result2.csv')
 
 #drop user_id column
 ratings = df.drop(columns='user_id')
