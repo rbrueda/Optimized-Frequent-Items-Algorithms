@@ -21,7 +21,7 @@ python3 apriori-optimized.py
 - Running the result using dataset.csv
 - - Files:
   - pcy.py: original PCY code
-  - .py: PCY with cuckoo hashing (not optimized)
+  - pcyC.py: PCY with cuckoo hashing (not optimized)
   - pcyCuckoo-resizing.py: PCY with dynamic resizing
 - For optimized PCY, run the following commands:
 ```bash
