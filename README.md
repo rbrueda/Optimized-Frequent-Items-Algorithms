@@ -14,7 +14,7 @@ python3 apriori-optimized.py
 ```
 
 ## PCY
-- Running the result using dataset
+- Running the result using dataset.csv
 - For optimized PCY, run the following commands:
 ```bash
 cd PCY
