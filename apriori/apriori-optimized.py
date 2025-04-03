@@ -22,11 +22,6 @@ def getVerticalDataRepresentation(df):
 
     return vertical_df
 
-#implement heap-based pruning -> min heap to prioritize high impact itemsets based on their support -> dynamically prunes low-priority itemsets
-#prioritizing items by importance score and impact score 
-import heapq
-import numpy as np
-
 def pruneLowImpactItems(vertical_df, minSupport, total_transactions, w1=0.5, w2=0.5):
     min_heap = []
     priority_values = []
@@ -34,6 +29,7 @@ def pruneLowImpactItems(vertical_df, minSupport, total_transactions, w1=0.5, w2=
     #computes median support to define relative importance (only median will values that pass minSupport)
     supports = [len(v) for v in vertical_df.values() if len(v) >= minSupport]
     median_support = np.median(supports) if supports else 1  #avoids division by zero
+    print(f"median support: {median_support}")
 
     for movieID, transactions in list(vertical_df.items()):
         support = len(transactions) #computes importance
@@ -129,8 +125,6 @@ def apriori(df, minSupport, minConfidence, liftThreshold):
             # If the support of the itemset is >= minSupport, add to the currentLSet
             if support >= adjusted_minSupport: 
                 currentLSet.add(itemset)
-
-        print(f"k = {k} {len(currentLSet)}")
 
         k = k + 1
 

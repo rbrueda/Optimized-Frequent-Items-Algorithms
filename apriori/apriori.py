@@ -23,7 +23,6 @@ def returnItemsWithMinSupport(movieSet, ratingsList, minSupport, freqSet):
                 freqSet[movie] += 1
                 localSet[movie] += 1
 
-
     for movie, count in localSet.items():
         support = float(count)
 
@@ -56,7 +55,6 @@ def joinSet(itemSet, length):
         [i.union(j) for i in itemSet for j in itemSet if len(i.union(j)) == length]
     )
 
-
 #update: use lift instead of confidence
 def apriori(df, minSupport, minConfidence):
     #extracts the set of unique items (movies) and the list of transactions (user ratings or transactions) from the dataset
@@ -64,12 +62,9 @@ def apriori(df, minSupport, minConfidence):
 
     freqSet = defaultdict(int) #dictionary to store frequency of itemsets
     largeSet = dict() #stores frequent itemsets at each iteration
-    assocRules = dict() #stores the association rules
 
     #extracts frequent 1-itemsets -> updates freqSet with support counts
     oneCSet = returnItemsWithMinSupport(movieSet, ratingsList, minSupport, freqSet)
-
-    print(f"length of k = 1: {len(oneCSet)}")
 
     #starting with 1-itemsets as the initial frequent itemsets
     currentLSet = oneCSet
@@ -86,8 +81,6 @@ def apriori(df, minSupport, minConfidence):
         #prune itemsets using minSupport
         currentLSet = returnItemsWithMinSupport(
             currentCSet, ratingsList, minSupport, freqSet)
-        
-        print(f"length of k = {k}: {len(currentLSet)}")
 
         k = k + 1
 
@@ -119,7 +112,7 @@ def apriori(df, minSupport, minConfidence):
 def skewness_correction(skewness, k=2.5, c=1.0):
     return 1 + (np.tanh(k * (abs(skewness) - c)) / 2)
 
-df = pd.read_csv('result2.csv')
+df = pd.read_csv('../result2.csv')
 
 # Drop user_id column
 ratings = df.drop(columns='user_id')
