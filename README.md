@@ -3,7 +3,7 @@ Project for COMP-4250
 
 This repository contains the optimized algorithms for both Apriori and PCY. Before you run, make sure all libraries are installed using **pip**.
 
-- Both frequent algorithms ran on [MovieLens 100K Dataset](https://www.kaggle.com/datasets/prajitdatta/movielens-100k-dataset) from Kaggle. The data was transformed in a user-item interaction matrix in a binary format (1 if a user rated a movie, 0 otherwise). The transformed file is written in result2.csv
+- Both frequent algorithms ran on [MovieLens 100K Dataset](https://www.kaggle.com/datasets/prajitdatta/movielens-100k-dataset) from Kaggle. The data was transformed in a user-item interaction matrix in a binary format (1 if a user rated a movie, 0 otherwise). The transformed file is written in **result2.csv**.
 
 ## Apriori
 - Files:
