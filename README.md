@@ -32,4 +32,7 @@ cd PCY
 python3 pcyCuckoo-resizing.py ../result2.csv 100
 ```
 
+# Research Paper
+https://drive.google.com/file/d/1-zgfWLsUIquqNLphjEXlsvUKgrG_ZN7u/view?usp=sharing
+
 
